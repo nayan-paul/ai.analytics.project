@@ -5,7 +5,7 @@ from pyspark.sql import SQLContext,Row
 #this process loads redshift data using Spark
 
 #wget https://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC41-1.2.1.1001.jar
-#spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /opt/projects/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
+#spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
 
 if __name__=='__main__':
 	context = SparkContext(appName='Spark RedShift Connection')
