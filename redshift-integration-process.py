@@ -11,10 +11,10 @@ import datetime
 
 #COMMON
 processTime = datetime.datetime.utcnow()
-start_time= (processTime - datetime.timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S')
+start_time= processTime.strftime('%Y-%m-%d')
 end_time=processTime.strftime('%Y-%m-%d %H:%M:%S')
 
-fields=('count_click','received_revenue','offer_id')
+fields=('type','key','count_click','received_revenue','offer_id','paid_revenue','roi')
 aggregationDTO = namedtuple('aggregationDTO',fields)
 ###############################################################################################################
 #M1
@@ -22,12 +22,26 @@ def M1(row):
 	try:
 		revenue = row['received_revenue']
 		offerId = row['offer_id']
-		return aggregationDTO(count_click=1,received_revenue=revenue,offer_id=offerId)
+		paidRevenue = row['paid_revenue']
+		return aggregationDTO(type='C',key=start_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0)
 	#try
 	except:
 		traceback.print_exc()
 	#except
 #M1
+###############################################################################################################
+#M2
+def M2(o):
+	try:
+		k=o[0]
+		v=o[1]
+		r = v.received_revenue-v.paid_revenue
+		return v.key+','+v.type+','+str(v.offer_id)+','+str(v.received_revenue)+','+str(v.paid_revenue)+','+str(r)+','+str(v.count_click)
+	#try
+	except:
+		traceback.print_exc()
+	#except
+#M2
 ###############################################################################################################
 
 if __name__=='__main__':
@@ -40,7 +54,7 @@ if __name__=='__main__':
 		
 		sqlContext = SQLContext(context)
 		
-		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id from conversion_log where redshift_time >= '"+start_time +"' AND redshift_time <= '"+end_time+"' limit 1000").option('tempdir','s3a://tmp.redshiftlogs').load()
+		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id,paid_revenue from conversion_log where conversion_time >= '"+start_time +"' AND conversion_time <= '"+end_time+"' ").option('tempdir','s3a://tmp.redshiftlogs').load()
 		
 		inputRDD = dataFrame.rdd
 		extractedRDD  = inputRDD.map(M1)		
@@ -51,15 +65,17 @@ if __name__=='__main__':
 			try:
 				c=agg.count_click+o.count_click
 				r=o.received_revenue+agg.received_revenue
-				return aggregationDTO(count_click=c,received_revenue=r,offer_id=agg.offer_id)
+				p=o.paid_revenue+agg.paid_revenue
+				return aggregationDTO(type=o.type,key=agg.key,count_click=c,received_revenue=r,offer_id=agg.offer_id,paid_revenue=p,roi=0)
 			#try
 			except:
 				traceback.print_exc()
 			#except
 		processedRDD = pairRDD.reduceByKey(R1)
+		savedRDD = processedRDD.map(M2)
 		
-		for tmp in processedRDD.collect():
-			print "Data======================================>>>>>>>>>>>>>>"+str(tmp)
+		for tmp in savedRDD.collect():
+			print "Data======================================>>>>>>>>>>>>>>"+tmp
 		
 	#try
 	except:
