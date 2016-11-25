@@ -9,12 +9,16 @@ import datetime
 #spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
 #spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
 
+#aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com
+#username/pass aitracker
+#database aitracker
+
 #COMMON
 processTime = datetime.datetime.utcnow()
 start_time= processTime.strftime('%Y-%m-%d')
 end_time=processTime.strftime('%Y-%m-%d %H:%M:%S')
 
-fields=('type','key','count_click','received_revenue','offer_id','paid_revenue','roi')
+fields=('type','key','count_click','received_revenue','offer_id','paid_revenue','roi','affiliate_id','geo_country','subid4')
 aggregationDTO = namedtuple('aggregationDTO',fields)
 ###############################################################################################################
 #M1
@@ -23,7 +27,13 @@ def M1(row):
 		revenue = row['received_revenue']
 		offerId = row['offer_id']
 		paidRevenue = row['paid_revenue']
-		return aggregationDTO(type='C',key=start_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0)
+		affiliateLst = []
+		affiliateLst.append(str(row['affiliate_id']))
+		geoLst = []
+		geoLst.append(row['geo_country'])
+		zoneLst=[]
+		zoneLst.append(str(row['subid4']))
+		return aggregationDTO(type='C',key=start_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0,affiliate_id=affiliateLst,geo_country=geoLst,subid4=zoneLst)
 	#try
 	except:
 		traceback.print_exc()
@@ -36,7 +46,10 @@ def M2(o):
 		k=o[0]
 		v=o[1]
 		r = v.received_revenue-v.paid_revenue
-		return v.key+','+v.type+','+str(v.offer_id)+','+str(v.received_revenue)+','+str(v.paid_revenue)+','+str(r)+','+str(v.count_click)
+		affiliateSet = set(v.affiliate_id)
+		geoSet=set(v.geo_country)
+		zoneSet = set(v.subid4)
+		return v.key+','+v.type+','+str(v.offer_id)+','+str(v.received_revenue)+','+str(v.paid_revenue)+','+str(r)+','+str(v.count_click)+','+"#".join(affiliateSet)+","+"#".join(geoSet)+","+"#".join(zoneSet)
 	#try
 	except:
 		traceback.print_exc()
@@ -54,7 +67,7 @@ if __name__=='__main__':
 		
 		sqlContext = SQLContext(context)
 		
-		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id,paid_revenue from conversion_log where conversion_time >= '"+start_time +"' AND conversion_time <= '"+end_time+"' ").option('tempdir','s3a://tmp.redshiftlogs').load()
+		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id,paid_revenue,affiliate_id,geo_country,subid4 from conversion_log where conversion_time >= '"+start_time +"' AND conversion_time <= '"+end_time+"' ").option('tempdir','s3a://tmp.redshiftlogs').load()
 		
 		inputRDD = dataFrame.rdd
 		extractedRDD  = inputRDD.map(M1)		
@@ -66,7 +79,11 @@ if __name__=='__main__':
 				c=agg.count_click+o.count_click
 				r=o.received_revenue+agg.received_revenue
 				p=o.paid_revenue+agg.paid_revenue
-				return aggregationDTO(type=o.type,key=agg.key,count_click=c,received_revenue=r,offer_id=agg.offer_id,paid_revenue=p,roi=0)
+				affiliateSet=filter(None,o.affiliate_id+agg.affiliate_id)
+				geoSet=filter(None,o.geo_country+agg.geo_country)
+				zoneSet = filter(None,o.subid4+agg.subid4)
+				
+				return aggregationDTO(type=o.type,key=agg.key,count_click=c,received_revenue=r,offer_id=agg.offer_id,paid_revenue=p,roi=0,affiliate_id=affiliateSet,geo_country=geoSet,subid4=zoneSet)
 			#try
 			except:
 				traceback.print_exc()
