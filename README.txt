@@ -8,3 +8,15 @@ http://54.152.197.111:7180/
 admin/AIMedia*
 
 
+create table v2_agg_stats(
+key_dt varchar(20),
+key_type varchar(2),
+offer_id varchar(30),
+received_revenue double,
+paid_revenue double,
+roi double,
+click_count int,
+affiliates varchar(500),
+geo varchar(500),
+zones varchar(500),
+PRIMARY KEY(key_dt,key_type,offer_id))
