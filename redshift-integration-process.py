@@ -6,12 +6,13 @@ import datetime
 #this process loads redshift data using Spark
 
 #wget https://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC41-1.2.1.1001.jar
-#spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
-#spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
+#spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar,/tmp/com.mysql.jdbc_5.1.5.jar redshift-integration-process.py
+#spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/com.mysql.jdbc_5.1.5.jar,/tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
 
 #aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com
 #username/pass aitracker
 #database aitracker
+	
 
 #COMMON
 processTime = datetime.datetime.utcnow()
@@ -20,6 +21,8 @@ end_time=processTime.strftime('%Y-%m-%d %H:%M:%S')
 
 fields=('type','key','count_click','received_revenue','offer_id','paid_revenue','roi','affiliate_id','geo_country','subid4')
 aggregationDTO = namedtuple('aggregationDTO',fields)
+
+properties ={"driver": "com.mysql.jdbc.Driver"}
 ###############################################################################################################
 #M1
 def M1(row):
@@ -49,7 +52,8 @@ def M2(o):
 		affiliateSet = set(v.affiliate_id)
 		geoSet=set(v.geo_country)
 		zoneSet = set(v.subid4)
-		return v.key+','+v.type+','+str(v.offer_id)+','+str(v.received_revenue)+','+str(v.paid_revenue)+','+str(r)+','+str(v.count_click)+','+"#".join(affiliateSet)+","+"#".join(geoSet)+","+"#".join(zoneSet)
+		return (v.key,v.type,str(v.offer_id),str(v.received_revenue),str(v.paid_revenue),str(r),str(v.count_click),"#".join(affiliateSet),"#".join(geoSet),"#".join(zoneSet))
+		
 	#try
 	except:
 		traceback.print_exc()
@@ -59,6 +63,7 @@ def M2(o):
 
 if __name__=='__main__':
 	context = SparkContext(appName='Spark RedShift Connection')
+	sqlContext = SQLContext(context)
 	try:
 		
 		context._jsc.hadoopConfiguration().set("fs.s3.impl", "org.apache.hadoop.fs.s3native.NativeS3FileSystem")
@@ -90,9 +95,8 @@ if __name__=='__main__':
 			#except
 		processedRDD = pairRDD.reduceByKey(R1)
 		savedRDD = processedRDD.map(M2)
-		
-		for tmp in savedRDD.collect():
-			print "Data======================================>>>>>>>>>>>>>>"+tmp
+		processedDF=savedRDD.toDF(['key_dt','key_type','offerid','received_revenue','paid_revenue','roi','click_count','affiliates','geo','zones'])
+		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_agg_stats',mode='overwrite',properties=properties)
 		
 	#try
 	except:
