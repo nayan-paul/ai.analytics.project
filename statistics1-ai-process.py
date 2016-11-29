@@ -2,26 +2,43 @@ import traceback
 from pyspark import SparkContext
 from collections import namedtuple
 from datetime import datetime
+from pyspark.sql import SQLContext,Row
 # This process is algo1 for calculating counts of clicks(destination_subid) per hour for combination of offer_id + offer_advertiser_id
 
 #http://offer.camp/stream-odd
-#spark-submit --master local statistics1-ai-process.py
-#spark-submit --master yarn-cluster statistics1-ai-process.py
+#spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar  statistics1-ai-process.py
+#spark-submit --master yarn-client --jars /tmp/com.mysql.jdbc_5.1.5.jar statistics1-ai-process.py
 
+#COMMON
+currentTime = datetime.utcnow()
 
-fields=('type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks')
+fields=('type','key_dt','offer_id','offer_advertiser_id','destination_subid','count_of_clicks')
 statsDTO = namedtuple('statsDTO',fields)
 
+properties ={"driver": "com.mysql.jdbc.Driver"}
+#######################################################################################################
 #M1
 def M1(line):
 	try:
 		tokens = line.split('\t')
-		return statsDTO(type=tokens[0],offer_id=tokens[6],offer_advertiser_id=tokens[5],destination_subid=tokens[2],count_of_clicks=1)
+		dt = str(currentTime.year)+'-'+str(currentTime.month).zfill(2) +'-'+str(currentTime.day).zfill(2) +'-'+str(currentTime.hour).zfill(2)
+		return statsDTO(type=tokens[0],key_dt=dt,offer_id=tokens[6],offer_advertiser_id=tokens[5],destination_subid=tokens[2],count_of_clicks=1)
 	#try
 	except:
 		traceback.print_exc()
 	#except
 ###############################################################################################################
+#M2
+def M2(tup):
+	try:
+		k = tup[0]
+		v = tup[1]
+		return (v.key_dt,v.type,v.offer_id,v.offer_advertiser_id,v.destination_subid,v.count_of_clicks)
+	#try
+	except:
+		traceback.print_exc()
+	#except
+##############################################################################################################
 #P1
 def P1(rdd):
 	try:
@@ -33,8 +50,9 @@ def P1(rdd):
 ###############################################################################################################	
 if __name__=='__main__':
 	context = SparkContext(appName="Statistics 1 Process")
+	sqlContext = SQLContext(context)
 	try:	
-		currentTime = datetime.utcnow()
+		
 		path1 = 's3a://v2clicklog/offer-stream-even/'+str(currentTime.year)+'/'+str(currentTime.month).zfill(2) +'/'+str(currentTime.day).zfill(2) +'/'+str(currentTime.hour).zfill(2) +"/*.gz"
 		path2 = 's3a://v2clicklog/offer-stream-odd/'+str(currentTime.year)+'/'+str(currentTime.month).zfill(2) +'/'+str(currentTime.day).zfill(2) +'/'+str(currentTime.hour).zfill(2) +"/*.gz"
 		
@@ -52,12 +70,13 @@ if __name__=='__main__':
 		
 		def R1(acc,p):
 			val = acc.count_of_clicks + p.count_of_clicks
-			return statsDTO(type=acc.type,offer_id=acc.offer_id,offer_advertiser_id=acc.offer_advertiser_id,destination_subid='NA',count_of_clicks=val)
+			return statsDTO(type=acc.type,key_dt=acc.key_dt,offer_id=acc.offer_id,offer_advertiser_id=acc.offer_advertiser_id,destination_subid='NA',count_of_clicks=val)
 		processedPairRDD = loadedPairRDD.reduceByKey(R1)
 		
-		for key,val in processedPairRDD.take(10):
-			print key+','+val.type +','+str(val.offer_id)+','+str(val.offer_advertiser_id)+","+str(val.count_of_clicks)
-		#for
+		rowRDD = processedPairRDD.map(M2)
+		processedDF=rowRDD.toDF(['key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks'])
+		
+		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_s3_stats',mode='overwrite',properties=properties)		
 	#try
 	except:
 		traceback.print_exc()

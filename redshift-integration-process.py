@@ -68,8 +68,6 @@ if __name__=='__main__':
 		context._jsc.hadoopConfiguration().set("fs.s3a.access.key", "AKIAJ6GZUJPYDANGPCEQ")
 		context._jsc.hadoopConfiguration().set("fs.s3a.secret.key", "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")
 		
-		sqlContext = SQLContext(context)
-		
 		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id,paid_revenue,affiliate_id,geo_country,subid4 from conversion_log where conversion_time >= '"+start_time +"' AND conversion_time <= '"+end_time+"' ").option('tempdir','s3a://tmp.redshiftlogs').load()
 		
 		inputRDD = dataFrame.rdd

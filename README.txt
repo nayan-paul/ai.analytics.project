@@ -20,3 +20,12 @@ affiliates varchar(500),
 geo varchar(500),
 zones varchar(500),
 PRIMARY KEY(key_dt,key_type,offer_id))
+
+create table v2_s3_stats(
+key_dt varchar(20),
+key_type varchar(20),
+offer_id varchar(30),
+offer_advertiser_id varchar(30),
+destination_subid varchar(30),
+count_of_clicks int,
+PRIMARY KEY(key_dt,key_type,offer_id))
