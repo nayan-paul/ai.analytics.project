@@ -9,9 +9,7 @@ import datetime
 #spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar,/tmp/com.mysql.jdbc_5.1.5.jar redshift-integration-process.py
 #spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/com.mysql.jdbc_5.1.5.jar,/tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
 
-#aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com
-#username/pass aitracker
-#database aitracker
+#*/5 * * * * sh /opt/projects/run_agg_redshift.sh
 	
 
 #COMMON
