@@ -8,6 +8,8 @@ from pyspark.sql import SQLContext,Row
 #http://offer.camp/stream-odd
 #spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar  statistics1-ai-process.py
 #spark-submit --master yarn-client --jars /tmp/com.mysql.jdbc_5.1.5.jar statistics1-ai-process.py
+#*/5 * * * * sh /opt/projects/run_s3agg_process.sh
+#crontab -l
 
 #COMMON
 currentTime = datetime.utcnow()
