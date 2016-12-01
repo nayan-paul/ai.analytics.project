@@ -9,7 +9,8 @@ import datetime
 #spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/RedshiftJDBC41-1.2.1.1001.jar,/tmp/com.mysql.jdbc_5.1.5.jar redshift-integration-process.py
 #spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/com.mysql.jdbc_5.1.5.jar,/tmp/RedshiftJDBC41-1.2.1.1001.jar redshift-integration-process.py
 
-#*/5 * * * * sh /opt/projects/run_agg_redshift.sh
+#*/5 * * * * sh /opt/projects/run_agg_redshift.sh >> /opt/projects/run_agg_redshift.stdout 2>>/opt/projects/run_agg_redshift.stderr
+#*/5 * * * * sh /opt/projects/run_s3agg_process.sh >> /opt/projects/run_s3agg_process.stdout 2>>/opt/projects/run_s3agg_process.stderr
 	
 
 #COMMON
@@ -58,7 +59,26 @@ def M2(o):
 	#except
 #M2
 ###############################################################################################################
+#M3
+def M3(row):
+	try:
+		revenue = row['received_revenue']
+		offerId = row['offer_id']
+		paidRevenue = row['paid_revenue']
+		affiliateLst = []
+		affiliateLst.append(str(row['affiliate_id']))
+		geoLst = []
+		geoLst.append(row['geo_country'])
+		zoneLst=[]
+		zoneLst.append(str(row['subid4']))
+		return aggregationDTO(type='R',key=start_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0,affiliate_id=affiliateLst,geo_country=geoLst,subid4=zoneLst)
+	#try
+	except:
+		traceback.print_exc()
+	#except
 
+#M3
+###############################################################################################################
 if __name__=='__main__':
 	context = SparkContext(appName='Spark RedShift Connection')
 	sqlContext = SQLContext(context)
@@ -74,7 +94,6 @@ if __name__=='__main__':
 		extractedRDD  = inputRDD.map(M1)		
 		pairRDD =extractedRDD.map(lambda p : (p.offer_id,p))
 		
-		print 'size============'+ str(dataFrame.count())
 		def R1(agg,o):
 			try:
 				c=agg.count_click+o.count_click
@@ -89,6 +108,18 @@ if __name__=='__main__':
 			except:
 				traceback.print_exc()
 			#except
+		processedRDD = pairRDD.reduceByKey(R1)
+		savedRDD = processedRDD.map(M2)
+		processedDF=savedRDD.toDF(['key_dt','key_type','offerid','received_revenue','paid_revenue','roi','click_count','affiliates','geo','zones'])
+		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_agg_stats',mode='overwrite',properties=properties)
+		
+		
+		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id,paid_revenue,affiliate_id,geo_country,subid4 from conversion_log where redshift_time >= '"+start_time +"' AND redshift_time <= '"+end_time+"' ").option('tempdir','s3a://tmp.redshiftlogs').load()
+		
+		inputRDD = dataFrame.rdd
+		extractedRDD  = inputRDD.map(M3)		
+		pairRDD =extractedRDD.map(lambda p : (p.offer_id,p))
+		
 		processedRDD = pairRDD.reduceByKey(R1)
 		savedRDD = processedRDD.map(M2)
 		processedDF=savedRDD.toDF(['key_dt','key_type','offerid','received_revenue','paid_revenue','roi','click_count','affiliates','geo','zones'])
