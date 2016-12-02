@@ -16,6 +16,7 @@ import datetime
 #COMMON
 processTime = datetime.datetime.utcnow()
 start_time= processTime.strftime('%Y-%m-%d')
+key_time= processTime.strftime('%Y-%m-%d %H:%M')
 end_time=processTime.strftime('%Y-%m-%d %H:%M:%S')
 
 fields=('type','key','count_click','received_revenue','offer_id','paid_revenue','roi','affiliate_id','geo_country','subid4')
@@ -35,7 +36,7 @@ def M1(row):
 		geoLst.append(row['geo_country'])
 		zoneLst=[]
 		zoneLst.append(str(row['subid4']))
-		return aggregationDTO(type='C',key=start_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0,affiliate_id=affiliateLst,geo_country=geoLst,subid4=zoneLst)
+		return aggregationDTO(type='C',key=key_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0,affiliate_id=affiliateLst,geo_country=geoLst,subid4=zoneLst)
 	#try
 	except:
 		traceback.print_exc()
@@ -71,7 +72,7 @@ def M3(row):
 		geoLst.append(row['geo_country'])
 		zoneLst=[]
 		zoneLst.append(str(row['subid4']))
-		return aggregationDTO(type='R',key=start_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0,affiliate_id=affiliateLst,geo_country=geoLst,subid4=zoneLst)
+		return aggregationDTO(type='R',key=key_time,count_click=1,received_revenue=revenue,offer_id=offerId,paid_revenue=paidRevenue,roi=0,affiliate_id=affiliateLst,geo_country=geoLst,subid4=zoneLst)
 	#try
 	except:
 		traceback.print_exc()
@@ -111,7 +112,7 @@ if __name__=='__main__':
 		processedRDD = pairRDD.reduceByKey(R1)
 		savedRDD = processedRDD.map(M2)
 		processedDF=savedRDD.toDF(['key_dt','key_type','offerid','received_revenue','paid_revenue','roi','click_count','affiliates','geo','zones'])
-		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_agg_stats',mode='overwrite',properties=properties)
+		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_agg_stats',mode='append',properties=properties)
 		
 		
 		dataFrame = sqlContext.read.format('com.databricks.spark.redshift').option('url','jdbc:redshift://aitracker.cj1dejkknhi8.us-east-1.redshift.amazonaws.com:5439/aitracker?user=aitracker&password=AITrack123').option('query',"select received_revenue,offer_id,paid_revenue,affiliate_id,geo_country,subid4 from conversion_log where redshift_time >= '"+start_time +"' AND redshift_time <= '"+end_time+"' ").option('tempdir','s3a://tmp.redshiftlogs').load()
@@ -123,7 +124,7 @@ if __name__=='__main__':
 		processedRDD = pairRDD.reduceByKey(R1)
 		savedRDD = processedRDD.map(M2)
 		processedDF=savedRDD.toDF(['key_dt','key_type','offerid','received_revenue','paid_revenue','roi','click_count','affiliates','geo','zones'])
-		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_agg_stats',mode='overwrite',properties=properties)
+		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_agg_stats',mode='append',properties=properties)
 		
 	#try
 	except:

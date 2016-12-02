@@ -13,6 +13,7 @@ from pyspark.sql import SQLContext,Row
 
 #COMMON
 currentTime = datetime.utcnow()
+key_time= currentTime.strftime('%Y-%m-%d %H:%M')
 
 fields=('type','key_dt','offer_id','offer_advertiser_id','destination_subid','count_of_clicks')
 statsDTO = namedtuple('statsDTO',fields)
@@ -24,7 +25,7 @@ def M1(line):
 	try:
 		tokens = line.split('\t')
 		dt = str(currentTime.year)+'-'+str(currentTime.month).zfill(2) +'-'+str(currentTime.day).zfill(2) +'-'+str(currentTime.hour).zfill(2)
-		return statsDTO(type=tokens[0],key_dt=dt,offer_id=tokens[6],offer_advertiser_id=tokens[5],destination_subid=tokens[2],count_of_clicks=1)
+		return statsDTO(type=tokens[0],key_dt=key_time,offer_id=tokens[6],offer_advertiser_id=tokens[5],destination_subid=tokens[2],count_of_clicks=1)
 	#try
 	except:
 		traceback.print_exc()
@@ -78,7 +79,7 @@ if __name__=='__main__':
 		rowRDD = processedPairRDD.map(M2)
 		processedDF=rowRDD.toDF(['key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks'])
 		
-		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_s3_stats',mode='overwrite',properties=properties)		
+		processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_s3_stats',mode='append',properties=properties)		
 	#try
 	except:
 		traceback.print_exc()
