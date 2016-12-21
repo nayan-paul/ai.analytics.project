@@ -4,20 +4,20 @@ from pyspark.sql import SQLContext,Row
 from collections import namedtuple
 import sys
 import datetime
+import pymysql
 #this process aggregates from v2_s3_stats and v2_agg_stats
 
-#spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/com.mysql.jdbc_5.1.5.jar,/tmp/RedshiftJDBC41-1.2.1.1001.jar  consolidated-aggregation-process.py 1
+#spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar consolidated-aggregation-process.py 1
 #spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --jars /tmp/com.mysql.jdbc_5.1.5.jar /opt/projects/consolidated-aggregation-process.py 1
 
 #crontab -e
-#*/7 * * * * sh /opt/projects/run_consolidated_s3agg_process.sh >> /opt/projects/run_consolidated_s3agg_process.stdout 2>>/opt/projects/run_consolidated_s3agg_process.stderr
+#*/45 * * * * sh /opt/projects/run_consolidated_s3agg_process.sh >> /opt/projects/run_consolidated_s3agg_process.stdout 2>>/opt/projects/run_consolidated_s3agg_process.stderr
 
 #COMMON
 properties ={"driver": "com.mysql.jdbc.Driver"}
 
-currentTime = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+currentTime = datetime.datetime.utcnow() 
 startTimeKey = currentTime.strftime('%Y-%m-%d')
-endTimeKey = datetime.datetime.utcnow().strftime('%Y-%m-%d')
 
 s3_fields=('key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks')
 s3_agg_dto = namedtuple('s3_agg_dto',s3_fields)
@@ -51,7 +51,7 @@ if __name__=='__main__':
 	sqlContext = SQLContext(context)
 	try:
 		if sys.argv[1]=='1':
-			dataFrame = sqlContext.read.format('jdbc').option('url','jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker').option("driver", "com.mysql.jdbc.Driver").option('dbtable',"(select key_dt,key_type,offer_id,offer_advertiser_id,destination_subid,count_of_clicks from v2_s3_stats where key_dt >= '"+startTimeKey +"'  and key_dt< '"+endTimeKey+"')  as custom").load()
+			dataFrame = sqlContext.read.format('jdbc').option('url','jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker').option("driver", "com.mysql.jdbc.Driver").option('dbtable',"(select key_dt,key_type,offer_id,offer_advertiser_id,destination_subid,count_of_clicks from v2_s3_stats where key_dt >= '"+startTimeKey +"' )  as custom").load()
 			
 			inputRDD = dataFrame.rdd
 			m1RDD = inputRDD.map(M1)
@@ -76,8 +76,14 @@ if __name__=='__main__':
 			
 			m2RDD = r1RDD.map(M2)
 			
-			processedDF = m2RDD.toDF(['key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks'])
-			processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_s3_consolidate_stats',mode='append',properties=properties)
+			con  = pymysql.connect(user='aitracker',password='aitracker',host='aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com',database='aitracker' ,port=3306)
+			cursor = con.cursor()
+			for o in m2RDD.collect():
+				cursor.execute("INSERT INTO v2_s3_consolidate_stats VALUES('"+str(o[0])+"','"+str(o[1])+"','"+str(o[2])+"','"+str(o[3])+"','"+str(o[4])+"',"+str(o[5])+") ON DUPLICATE KEY UPDATE count_of_clicks="+str(o[5])+"")
+			#for
+			cursor.close()
+			con.commit()
+			#processedDF = m2RDD.toDF(['key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks'])	#processedDF.write.jdbc(url='jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker',table='v2_s3_consolidate_stats',mode='append',properties=properties)
 		#if
 		elif sys.argv[1]=='2':
 			print 'process 2'
@@ -88,6 +94,7 @@ if __name__=='__main__':
 	#except
 	finally:
 		context.stop()
+		con.close()
 		print 'end of process...'
 	#finally
 #if
