@@ -9,13 +9,15 @@ import datetime
 #spark-submit --master local --packages com.databricks:spark-redshift_2.10:1.1.0 --jars /tmp/com.mysql.jdbc_5.1.5.jar,/tmp/RedshiftJDBC41-1.2.1.1001.jar  consolidated-aggregation-process.py 1
 #spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --jars /tmp/com.mysql.jdbc_5.1.5.jar /opt/projects/consolidated-aggregation-process.py 1
 
+#crontab -e
 #*/7 * * * * sh /opt/projects/run_consolidated_s3agg_process.sh >> /opt/projects/run_consolidated_s3agg_process.stdout 2>>/opt/projects/run_consolidated_s3agg_process.stderr
 
 #COMMON
 properties ={"driver": "com.mysql.jdbc.Driver"}
 
-currentTime = datetime.datetime.utcnow()
+currentTime = datetime.datetime.utcnow() - datetime.timedelta(days=1)
 startTimeKey = currentTime.strftime('%Y-%m-%d')
+endTimeKey = datetime.datetime.utcnow().strftime('%Y-%m-%d')
 
 s3_fields=('key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks')
 s3_agg_dto = namedtuple('s3_agg_dto',s3_fields)
@@ -49,8 +51,7 @@ if __name__=='__main__':
 	sqlContext = SQLContext(context)
 	try:
 		if sys.argv[1]=='1':
-			print "select key_dt,key_type,offer_id,offer_advertiser_id,destination_subid,count_of_clicks from v2_s3_stats where key_dt >= '"+startTimeKey +"' limit 300"
-			dataFrame = sqlContext.read.format('jdbc').option('url','jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker').option("driver", "com.mysql.jdbc.Driver").option('dbtable',"(select key_dt,key_type,offer_id,offer_advertiser_id,destination_subid,count_of_clicks from v2_s3_stats where key_dt >= '"+startTimeKey +"' limit 300)  as custom").load()
+			dataFrame = sqlContext.read.format('jdbc').option('url','jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker').option("driver", "com.mysql.jdbc.Driver").option('dbtable',"(select key_dt,key_type,offer_id,offer_advertiser_id,destination_subid,count_of_clicks from v2_s3_stats where key_dt >= '"+startTimeKey +"'  and key_dt< '"+endTimeKey+"')  as custom").load()
 			
 			inputRDD = dataFrame.rdd
 			m1RDD = inputRDD.map(M1)
