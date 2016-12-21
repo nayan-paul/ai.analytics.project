@@ -7,8 +7,11 @@ import datetime
 import pymysql
 #this process aggregates from v2_s3_stats and v2_agg_stats
 
-#spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar consolidated-aggregation-process.py 1
-#spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --jars /tmp/com.mysql.jdbc_5.1.5.jar /opt/projects/consolidated-aggregation-process.py 1
+#chmod -R 755 /home
+#chmod -R 775 /opt/anaconda
+#export PYSPARK_PYTHON=/root/anaconda2/bin/python
+#PYSPARK_PYTHON=/opt/anaconda/bin/python spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar consolidated-aggregation-process.py 1
+#PYSPARK_PYTHON=/opt/anaconda/bin/python spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --jars /tmp/com.mysql.jdbc_5.1.5.jar /opt/projects/consolidated-aggregation-process.py 1
 
 #crontab -e
 #*/45 * * * * sh /opt/projects/run_consolidated_s3agg_process.sh >> /opt/projects/run_consolidated_s3agg_process.stdout 2>>/opt/projects/run_consolidated_s3agg_process.stderr
