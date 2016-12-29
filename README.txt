@@ -40,3 +40,14 @@ offer_advertiser_id varchar(100),
 destination_subid varchar(100),
 count_of_clicks int,
 PRIMARY KEY(key_dt,key_type,offer_id))
+
+
+create table v2_agg_consolidate_stats(
+key_dt varchar(20),
+key_type varchar(20),
+offerid varchar(30),
+received_revenue varchar(200),
+paid_revenue varchar(200),
+roi varchar(200),
+click_count int,
+PRIMARY KEY(key_dt,key_type,offerid))

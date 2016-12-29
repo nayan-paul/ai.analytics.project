@@ -13,10 +13,11 @@ import pymysql
 #PYSPARK_PYTHON=/opt/anaconda/bin/python spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar consolidated-aggregation-process.py 1
 #PYSPARK_PYTHON=/opt/anaconda/bin/python spark-submit --master yarn-client --driver-memory 8G --driver-cores 4 --num-executors 3 --executor-memory 8G --jars /tmp/com.mysql.jdbc_5.1.5.jar /opt/projects/consolidated-aggregation-process.py 1
 
-#PYSPARK_PYTHON=/opt/anaconda/bin/python spark-submit --master local --jars /tmp/com.mysql.jdbc_5.1.5.jar consolidated-aggregation-process.py 2
+#PYSPARK_PYTHON=/opt/anaconda/bin/python spark-submit --master yarn-client --jars /tmp/com.mysql.jdbc_5.1.5.jar consolidated-aggregation-process.py 2
 
 #crontab -e
-#*/45 * * * * sh /opt/projects/run_consolidated_s3agg_process.sh >> /opt/projects/run_consolidated_s3agg_process.stdout 2>>/opt/projects/run_consolidated_s3agg_process.stderr
+#0 * * * * sh /opt/projects/run_consolidated_s3agg_process.sh >> /opt/projects/run_consolidated_s3agg_process.stdout 2>>/opt/projects/run_consolidated_s3agg_process.stderr
+#0 * * * * sh /opt/projects/run_consolidated_agg_process.sh >> /opt/projects/run_consolidated_agg_process.stdout 2>>/opt/projects/run_consolidated_agg_process.stderr
 
 #COMMON
 properties ={"driver": "com.mysql.jdbc.Driver"}
@@ -27,7 +28,7 @@ startTimeKey = currentTime.strftime('%Y-%m-%d')
 s3_fields=('key_dt','key_type','offer_id','offer_advertiser_id','destination_subid','count_of_clicks')
 s3_agg_dto = namedtuple('s3_agg_dto',s3_fields)
 
-agg_fields = ('key_dt','key_type','received_revenue','paid_revenue','roi','click_count')
+agg_fields = ('key_dt','key_type','offerid','received_revenue','paid_revenue','roi','click_count')
 agg_dto=namedtuple('agg_dto',agg_fields)
 ###############################################################################################################
 #M1
@@ -58,8 +59,8 @@ def M2(o):
 def M3(row):
 	try:
 		key = row['key_dt'][:10]
-		o= agg_dto(key_dt=key,key_type=row['key_type'],received_revenue=row['received_revenue'],paid_revenue=row['paid_revenue'],roi=row['roi'],click_count=row['click_count'])
-		return (key+"-"+o.key_type,o)
+		o= agg_dto(key_dt=row['key_dt'],key_type=row['key_type'],offerid=row['offerid'],received_revenue=row['received_revenue'],paid_revenue=row['paid_revenue'],roi=row['roi'],click_count=row['click_count'])
+		return (key+"-"+o.key_type+"-"+row['offerid'],o)
 	#try
 	except:
 		traceback.print_exc()
@@ -72,7 +73,7 @@ def M3(row):
 def M4(o):
 	try:
 		v= o[1]
-		return (v.key_dt,v.key_type,v.received_revenue,v.paid_revenue,v.roi,v.count_of_clicks)
+		return (v.key_dt[:10],v.key_type,v.offerid,v.received_revenue,v.paid_revenue,v.roi,v.click_count)
 	#try
 	except:
 		traceback.print_exc()
@@ -123,21 +124,22 @@ if __name__=='__main__':
 		#if
 		elif sys.argv[1]=='2':
 			print 'process 2'
-			print "(select key_dt,key_type,received_revenue,paid_revenue,roi,click_count from v2_agg_stats where key_dt >= '"+startTimeKey +"' ) "
-			dataFrame = sqlContext.read.format('jdbc').option('url','jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker').option("driver", "com.mysql.jdbc.Driver").option('dbtable',"(select key_dt,key_type,received_revenue,paid_revenue,roi,click_count from v2_agg_stats where key_dt >= '"+startTimeKey +"' )  as custom").load()
+			dataFrame = sqlContext.read.format('jdbc').option('url','jdbc:mysql://aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com:3306/aitracker?user=aitracker&password=aitracker').option("driver", "com.mysql.jdbc.Driver").option('dbtable',"(select key_dt,key_type,offerid,received_revenue,paid_revenue,roi,click_count from v2_agg_stats where key_dt >= '"+startTimeKey +"' )  as custom").load()
 			
 			input = dataFrame.rdd
 			m3RDD = input.map(M3)
-			print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
-			print m3RDD.first()
+			
 			def R2(agg,o):
 				try:
-					agg.received_revenue = agg.received_revenue+o.received_revenue
-					agg.paid_revenue=agg.paid_revenue+o.paid_revenue
-					agg.roi = agg.roi+o.roi
-					agg.count_of_clicks = agg.count_of_clicks+o.count_of_clicks
+					k1= datetime.datetime.strptime(agg.key_dt,'%Y-%m-%d %H:%M')
+					k2= datetime.datetime.strptime(o.key_dt,'%Y-%m-%d %H:%M')
 					
-					return agg
+					if k1>=k2:
+						return agg
+					#if
+					else:
+						return o
+					#else
 				#try
 				except:
 					traceback.print_exc()
@@ -145,9 +147,14 @@ if __name__=='__main__':
 			r2RDD = m3RDD.reduceByKey(R2)
 			m4RDD = r2RDD.map(M4)
 			
+			con  = pymysql.connect(user='aitracker',password='aitracker',host='aitracker.c3zkpgahaaif.us-east-1.rds.amazonaws.com',database='aitracker' ,port=3306)
+			cursor = con.cursor()
 			for o in m4RDD.collect():
-				print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'+o
+				cursor.execute("INSERT INTO v2_agg_consolidate_stats VALUES('"+str(o[0])+"','"+str(o[1])+"','"+str(o[2])+"','"+str(o[3])+"','"+str(o[4])+"','"+str(o[5])+"',"+str(o[6])+") ON DUPLICATE KEY UPDATE  received_revenue='"+str(o[3])+"' , paid_revenue='"+str(o[4])+"' , roi='"+str(o[5])+"' , click_count="+str(o[6])+" ")
 			#for
+			cursor.close()
+			con.commit()
+			con.close()
 		#if
 	#try
 	except:
